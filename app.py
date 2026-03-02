@@ -1,9 +1,10 @@
 import os
+import pg8000
+import pg8000.native
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import psycopg2
-import psycopg2.extras
 from dotenv import load_dotenv
+from urllib.parse import urlparse
 
 load_dotenv()
 
@@ -11,7 +12,19 @@ app = Flask(__name__)
 CORS(app, origins=["https://dashboard.joshwhitcomb.com", "http://localhost:3000"])
 
 def get_db():
-    return psycopg2.connect(os.environ["DATABASE_URL"])
+    url = urlparse(os.environ["DATABASE_URL"])
+    return pg8000.connect(
+        host=url.hostname,
+        port=url.port or 5432,
+        database=url.path[1:],
+        user=url.username,
+        password=url.password,
+        ssl_context=True
+    )
+
+def fetchall_dict(cursor):
+    cols = [d[0] for d in cursor.description]
+    return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
 def init_db():
     conn = get_db()
@@ -24,23 +37,31 @@ def init_db():
             owner TEXT,
             type TEXT,
             updated_at TIMESTAMP DEFAULT NOW()
-        );
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS net_worth_history (
             id SERIAL PRIMARY KEY,
             date TEXT NOT NULL UNIQUE,
             value NUMERIC(12,2),
             created_at TIMESTAMP DEFAULT NOW()
-        );
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS income (
             id SERIAL PRIMARY KEY,
             key TEXT NOT NULL UNIQUE,
             value NUMERIC(12,2)
-        );
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS contributions (
             id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
             amount NUMERIC(10,2)
-        );
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS wheel_trades (
             id SERIAL PRIMARY KEY,
             ticker TEXT NOT NULL,
@@ -51,18 +72,24 @@ def init_db():
             premium NUMERIC(10,2),
             contracts INTEGER,
             status TEXT
-        );
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS wheel_shares (
             id SERIAL PRIMARY KEY,
             ticker TEXT NOT NULL UNIQUE,
             shares INTEGER,
             cost_basis NUMERIC(8,2)
-        );
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS weight_log (
             id SERIAL PRIMARY KEY,
             date TEXT NOT NULL UNIQUE,
             weight NUMERIC(5,1)
-        );
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS labs (
             id SERIAL PRIMARY KEY,
             date TEXT NOT NULL UNIQUE,
@@ -72,7 +99,9 @@ def init_db():
             hdl INTEGER,
             ldl INTEGER,
             vitamin_d NUMERIC(5,1)
-        );
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS goals (
             id SERIAL PRIMARY KEY,
             year INTEGER NOT NULL,
@@ -80,11 +109,13 @@ def init_db():
             target NUMERIC(8,1),
             current NUMERIC(8,1),
             unit TEXT
-        );
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT
-        );
+        )
     """)
     conn.commit()
     cur.close()
@@ -94,11 +125,11 @@ def init_db():
 @app.route("/api/accounts", methods=["GET"])
 def get_accounts():
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM accounts ORDER BY id")
-    rows = cur.fetchall()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name, balance, owner, type FROM accounts ORDER BY id")
+    rows = fetchall_dict(cur)
     cur.close(); conn.close()
-    return jsonify(list(rows))
+    return jsonify(rows)
 
 @app.route("/api/accounts", methods=["POST"])
 def save_accounts():
@@ -118,11 +149,11 @@ def save_accounts():
 @app.route("/api/net-worth-history", methods=["GET"])
 def get_history():
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn.cursor()
     cur.execute("SELECT date, value FROM net_worth_history ORDER BY date")
-    rows = cur.fetchall()
+    rows = fetchall_dict(cur)
     cur.close(); conn.close()
-    return jsonify(list(rows))
+    return jsonify(rows)
 
 @app.route("/api/net-worth-history", methods=["POST"])
 def save_history():
@@ -142,9 +173,9 @@ def save_history():
 @app.route("/api/income", methods=["GET"])
 def get_income():
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn.cursor()
     cur.execute("SELECT key, value FROM income")
-    rows = {r["key"]: float(r["value"]) for r in cur.fetchall()}
+    rows = {r[0]: float(r[1]) for r in cur.fetchall()}
     cur.close(); conn.close()
     return jsonify(rows)
 
@@ -165,11 +196,11 @@ def save_income():
 @app.route("/api/contributions", methods=["GET"])
 def get_contributions():
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM contributions ORDER BY id")
-    rows = cur.fetchall()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name, amount FROM contributions ORDER BY id")
+    rows = fetchall_dict(cur)
     cur.close(); conn.close()
-    return jsonify(list(rows))
+    return jsonify(rows)
 
 @app.route("/api/contributions", methods=["POST"])
 def save_contributions():
@@ -187,11 +218,11 @@ def save_contributions():
 @app.route("/api/wheel/trades", methods=["GET"])
 def get_trades():
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM wheel_trades ORDER BY date")
-    rows = cur.fetchall()
+    cur = conn.cursor()
+    cur.execute("SELECT id, ticker, date, type, strike, expiry, premium, contracts, status FROM wheel_trades ORDER BY date")
+    rows = fetchall_dict(cur)
     cur.close(); conn.close()
-    return jsonify(list(rows))
+    return jsonify(rows)
 
 @app.route("/api/wheel/trades", methods=["POST"])
 def save_trade():
@@ -208,11 +239,11 @@ def save_trade():
 @app.route("/api/wheel/shares", methods=["GET"])
 def get_shares():
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM wheel_shares")
-    rows = cur.fetchall()
+    cur = conn.cursor()
+    cur.execute("SELECT id, ticker, shares, cost_basis FROM wheel_shares")
+    rows = fetchall_dict(cur)
     cur.close(); conn.close()
-    return jsonify(list(rows))
+    return jsonify(rows)
 
 @app.route("/api/wheel/shares", methods=["POST"])
 def save_shares():
@@ -231,11 +262,11 @@ def save_shares():
 @app.route("/api/health/weight", methods=["GET"])
 def get_weight():
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn.cursor()
     cur.execute("SELECT date, weight FROM weight_log ORDER BY date")
-    rows = cur.fetchall()
+    rows = fetchall_dict(cur)
     cur.close(); conn.close()
-    return jsonify(list(rows))
+    return jsonify(rows)
 
 @app.route("/api/health/weight", methods=["POST"])
 def save_weight():
@@ -252,11 +283,11 @@ def save_weight():
 @app.route("/api/health/labs", methods=["GET"])
 def get_labs():
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM labs ORDER BY date")
-    rows = cur.fetchall()
+    cur = conn.cursor()
+    cur.execute("SELECT id, date, a1c, fasting_glucose, triglycerides, hdl, ldl, vitamin_d FROM labs ORDER BY date")
+    rows = fetchall_dict(cur)
     cur.close(); conn.close()
-    return jsonify(list(rows))
+    return jsonify(rows)
 
 @app.route("/api/health/labs", methods=["POST"])
 def save_labs():
@@ -282,11 +313,11 @@ def save_labs():
 @app.route("/api/goals", methods=["GET"])
 def get_goals():
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM goals ORDER BY id")
-    rows = cur.fetchall()
+    cur = conn.cursor()
+    cur.execute("SELECT id, year, name, target, current, unit FROM goals ORDER BY id")
+    rows = fetchall_dict(cur)
     cur.close(); conn.close()
-    return jsonify(list(rows))
+    return jsonify(rows)
 
 @app.route("/api/goals", methods=["POST"])
 def save_goals():
@@ -306,9 +337,9 @@ def save_goals():
 @app.route("/api/settings", methods=["GET"])
 def get_settings():
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn.cursor()
     cur.execute("SELECT key, value FROM settings")
-    rows = {r["key"]: r["value"] for r in cur.fetchall()}
+    rows = {r[0]: r[1] for r in cur.fetchall()}
     cur.close(); conn.close()
     return jsonify(rows)
 
