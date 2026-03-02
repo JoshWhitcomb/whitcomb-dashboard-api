@@ -104,18 +104,13 @@ def init_db():
             diastolic INTEGER
         )
     """)
-    try:
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS meditation_log (
-                id SERIAL PRIMARY KEY,
-                date TEXT NOT NULL UNIQUE,
-                minutes NUMERIC(6,1)
-            )
-        """)
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        print('meditation_log creation error:', e)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS meditation_log (
+            id SERIAL PRIMARY KEY,
+            date TEXT NOT NULL UNIQUE,
+            minutes NUMERIC(6,1)
+        )
+    """)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS goals (
             id SERIAL PRIMARY KEY,
@@ -407,6 +402,14 @@ def sync():
 
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True, "date": date})
+
+@app.route("/api/meditation/<date>", methods=["DELETE"])
+def delete_meditation(date):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM meditation_log WHERE date = %s", (date,))
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"ok": True})
 
 # ── Goals ─────────────────────────────────────────────
 @app.route("/api/goals", methods=["GET"])
