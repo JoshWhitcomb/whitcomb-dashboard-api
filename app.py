@@ -369,7 +369,9 @@ def sync():
         return jsonify({"error": "date required"}), 400
 
     def to_float(v):
-        try: return float(v) if v not in (None, '', 'null') else None
+        try:
+            if v in (None, '', 'null'): return None
+            return float(str(v).split()[0])
         except: return None
     def to_int(v):
         try: return int(float(v)) if v not in (None, '', 'null') else None
