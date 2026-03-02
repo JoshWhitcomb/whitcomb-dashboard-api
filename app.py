@@ -344,13 +344,24 @@ def sync():
     # Ensure row exists for this date
     cur.execute("INSERT INTO weight_log (date) VALUES (%s) ON CONFLICT (date) DO NOTHING", (date,))
 
-    # Update whichever fields were provided
-    if data.get("weight") is not None:
-        cur.execute("UPDATE weight_log SET weight = %s WHERE date = %s", (data["weight"], date))
-    if data.get("steps") is not None:
-        cur.execute("UPDATE weight_log SET steps = %s WHERE date = %s", (data["steps"], date))
-    if data.get("sleepMinutes") is not None:
-        cur.execute("UPDATE weight_log SET sleep_minutes = %s WHERE date = %s", (data["sleepMinutes"], date))
+    # Safely convert values, treating empty strings as None
+    def to_float(v):
+        try: return float(v) if v not in (None, '', 'null') else None
+        except: return None
+    def to_int(v):
+        try: return int(float(v)) if v not in (None, '', 'null') else None
+        except: return None
+
+    weight = to_float(data.get("weight"))
+    steps = to_int(data.get("steps"))
+    sleep = to_int(data.get("sleepMinutes"))
+
+    if weight is not None:
+        cur.execute("UPDATE weight_log SET weight = %s WHERE date = %s", (weight, date))
+    if steps is not None:
+        cur.execute("UPDATE weight_log SET steps = %s WHERE date = %s", (steps, date))
+    if sleep is not None:
+        cur.execute("UPDATE weight_log SET sleep_minutes = %s WHERE date = %s", (sleep, date))
 
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True, "date": date})
