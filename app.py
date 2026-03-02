@@ -25,24 +25,7 @@ def fetchall_dict(cursor):
     cols = [d[0] for d in cursor.description]
     return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
-def 
-@app.route("/api/migrate", methods=["POST"])
-def migrate():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS meditation_log (
-            id SERIAL PRIMARY KEY,
-            date TEXT NOT NULL UNIQUE,
-            minutes NUMERIC(6,1)
-        )
-    """)
-    conn.commit()
-    cur.close()
-    conn.close()
-    return jsonify({"ok": True, "message": "meditation_log created"})
-
-init_db():
+def init_db():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
@@ -470,23 +453,6 @@ def save_settings():
 @app.route("/api/health-check")
 def health_check():
     return jsonify({"status": "ok"})
-
-
-@app.route("/api/migrate", methods=["POST"])
-def migrate():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS meditation_log (
-            id SERIAL PRIMARY KEY,
-            date TEXT NOT NULL UNIQUE,
-            minutes NUMERIC(6,1)
-        )
-    """)
-    conn.commit()
-    cur.close()
-    conn.close()
-    return jsonify({"ok": True, "message": "meditation_log created"})
 
 init_db()
 
