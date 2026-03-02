@@ -104,13 +104,18 @@ def init_db():
             diastolic INTEGER
         )
     """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS meditation_log (
-            id SERIAL PRIMARY KEY,
-            date TEXT NOT NULL UNIQUE,
-            minutes NUMERIC(6,1)
-        )
-    """)
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS meditation_log (
+                id SERIAL PRIMARY KEY,
+                date TEXT NOT NULL UNIQUE,
+                minutes NUMERIC(6,1)
+            )
+        """)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print('meditation_log creation error:', e)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS goals (
             id SERIAL PRIMARY KEY,
