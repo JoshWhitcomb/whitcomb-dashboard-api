@@ -19,7 +19,7 @@ def get_db():
         database=url.path[1:],
         user=url.username,
         password=url.password,
-        ssl_context=True
+        ssl_context=False
     )
 
 def fetchall_dict(cursor):
