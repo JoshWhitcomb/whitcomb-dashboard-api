@@ -85,7 +85,9 @@ def init_db():
         CREATE TABLE IF NOT EXISTS weight_log (
             id SERIAL PRIMARY KEY,
             date TEXT NOT NULL UNIQUE,
-            weight NUMERIC(5,1)
+            weight NUMERIC(5,1),
+            steps INTEGER,
+            sleep_minutes INTEGER
         )
     """)
     cur.execute("""
@@ -97,7 +99,9 @@ def init_db():
             triglycerides INTEGER,
             hdl INTEGER,
             ldl INTEGER,
-            vitamin_d NUMERIC(5,1)
+            vitamin_d NUMERIC(5,1),
+            systolic INTEGER,
+            diastolic INTEGER
         )
     """)
     cur.execute("""
@@ -116,6 +120,19 @@ def init_db():
             value TEXT
         )
     """)
+    # Safe column migrations
+    for col, coltype in [('steps', 'INTEGER'), ('sleep_minutes', 'INTEGER')]:
+        try:
+            cur.execute(f"ALTER TABLE weight_log ADD COLUMN {col} {coltype}")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+    for col, coltype in [('systolic', 'INTEGER'), ('diastolic', 'INTEGER')]:
+        try:
+            cur.execute(f"ALTER TABLE labs ADD COLUMN {col} {coltype}")
+            conn.commit()
+        except Exception:
+            conn.rollback()
     conn.commit()
     cur.close()
     conn.close()
@@ -262,7 +279,7 @@ def save_shares():
 def get_weight():
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT date, weight FROM weight_log ORDER BY date")
+    cur.execute("SELECT date, weight, steps, sleep_minutes FROM weight_log ORDER BY date")
     rows = fetchall_dict(cur)
     cur.close(); conn.close()
     return jsonify(rows)
@@ -273,7 +290,8 @@ def save_weight():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        INSERT INTO weight_log (date, weight) VALUES (%s, %s)
+        INSERT INTO weight_log (date, weight)
+        VALUES (%s, %s)
         ON CONFLICT (date) DO UPDATE SET weight = EXCLUDED.weight
     """, (data["date"], data["weight"]))
     conn.commit(); cur.close(); conn.close()
@@ -283,7 +301,7 @@ def save_weight():
 def get_labs():
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, date, a1c, fasting_glucose, triglycerides, hdl, ldl, vitamin_d FROM labs ORDER BY date")
+    cur.execute("SELECT id, date, a1c, fasting_glucose, triglycerides, hdl, ldl, vitamin_d, systolic, diastolic FROM labs ORDER BY date")
     rows = fetchall_dict(cur)
     cur.close(); conn.close()
     return jsonify(rows)
@@ -294,19 +312,48 @@ def save_labs():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        INSERT INTO labs (date, a1c, fasting_glucose, triglycerides, hdl, ldl, vitamin_d)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO labs (date, a1c, fasting_glucose, triglycerides, hdl, ldl, vitamin_d, systolic, diastolic)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (date) DO UPDATE SET
             a1c = EXCLUDED.a1c,
             fasting_glucose = EXCLUDED.fasting_glucose,
             triglycerides = EXCLUDED.triglycerides,
             hdl = EXCLUDED.hdl,
             ldl = EXCLUDED.ldl,
-            vitamin_d = EXCLUDED.vitamin_d
+            vitamin_d = EXCLUDED.vitamin_d,
+            systolic = EXCLUDED.systolic,
+            diastolic = EXCLUDED.diastolic
     """, (data["date"], data.get("a1c"), data.get("fastingGlucose"),
-          data.get("triglycerides"), data.get("hdl"), data.get("ldl"), data.get("vitaminD")))
+          data.get("triglycerides"), data.get("hdl"), data.get("ldl"),
+          data.get("vitaminD"), data.get("systolic"), data.get("diastolic")))
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
+
+# ── iOS Shortcut Sync ─────────────────────────────────
+# POST { date, weight, steps, sleepMinutes }
+@app.route("/api/sync", methods=["POST"])
+def sync():
+    data = request.json
+    date = data.get("date")
+    if not date:
+        return jsonify({"error": "date required"}), 400
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Ensure row exists for this date
+    cur.execute("INSERT INTO weight_log (date) VALUES (%s) ON CONFLICT (date) DO NOTHING", (date,))
+
+    # Update whichever fields were provided
+    if data.get("weight") is not None:
+        cur.execute("UPDATE weight_log SET weight = %s WHERE date = %s", (data["weight"], date))
+    if data.get("steps") is not None:
+        cur.execute("UPDATE weight_log SET steps = %s WHERE date = %s", (data["steps"], date))
+    if data.get("sleepMinutes") is not None:
+        cur.execute("UPDATE weight_log SET sleep_minutes = %s WHERE date = %s", (data["sleepMinutes"], date))
+
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"ok": True, "date": date})
 
 # ── Goals ─────────────────────────────────────────────
 @app.route("/api/goals", methods=["GET"])
