@@ -18,8 +18,7 @@ def get_db():
         port=url.port or 5432,
         database=url.path[1:],
         user=url.username,
-        password=url.password,
-        ssl_context=False
+        password=url.password
     )
 
 def fetchall_dict(cursor):
