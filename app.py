@@ -360,6 +360,7 @@ def save_settings():
 def health_check():
     return jsonify({"status": "ok"})
 
+init_db()
+
 if __name__ == "__main__":
-    init_db()
     app.run(debug=True)
