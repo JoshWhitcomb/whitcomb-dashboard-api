@@ -105,6 +105,13 @@ def init_db():
         )
     """)
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS meditation_log (
+            id SERIAL PRIMARY KEY,
+            date TEXT NOT NULL UNIQUE,
+            minutes NUMERIC(6,1)
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS goals (
             id SERIAL PRIMARY KEY,
             year INTEGER NOT NULL,
@@ -274,7 +281,7 @@ def save_shares():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
-# ── Health ────────────────────────────────────────────
+# ── Health: Weight ─────────────────────────────────────
 @app.route("/api/health/weight", methods=["GET"])
 def get_weight():
     conn = get_db()
@@ -297,6 +304,7 @@ def save_weight():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
+# ── Health: Labs ───────────────────────────────────────
 @app.route("/api/health/labs", methods=["GET"])
 def get_labs():
     conn = get_db()
@@ -329,22 +337,37 @@ def save_labs():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
-# ── iOS Shortcut Sync ─────────────────────────────────
-# POST { date, weight, steps, sleepMinutes }
+# ── Meditation ─────────────────────────────────────────
+@app.route("/api/meditation", methods=["GET"])
+def get_meditation():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT date, minutes FROM meditation_log ORDER BY date")
+    rows = fetchall_dict(cur)
+    cur.close(); conn.close()
+    return jsonify(rows)
+
+@app.route("/api/meditation", methods=["POST"])
+def save_meditation():
+    data = request.json
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO meditation_log (date, minutes)
+        VALUES (%s, %s)
+        ON CONFLICT (date) DO UPDATE SET minutes = EXCLUDED.minutes
+    """, (data["date"], data["minutes"]))
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"ok": True})
+
+# ── iOS Shortcut Sync ──────────────────────────────────
 @app.route("/api/sync", methods=["POST"])
 def sync():
     data = request.json
-    date = data.get("date")
+    date = data.get("date", "").strip()
     if not date:
         return jsonify({"error": "date required"}), 400
 
-    conn = get_db()
-    cur = conn.cursor()
-
-    # Ensure row exists for this date
-    cur.execute("INSERT INTO weight_log (date) VALUES (%s) ON CONFLICT (date) DO NOTHING", (date,))
-
-    # Safely convert values, treating empty strings as None
     def to_float(v):
         try: return float(v) if v not in (None, '', 'null') else None
         except: return None
@@ -352,16 +375,30 @@ def sync():
         try: return int(float(v)) if v not in (None, '', 'null') else None
         except: return None
 
-    weight = to_float(data.get("weight"))
-    steps = to_int(data.get("steps"))
-    sleep = to_int(data.get("sleepMinutes"))
+    conn = get_db()
+    cur = conn.cursor()
 
+    # Weight / steps / sleep
+    weight = to_float(data.get("weight"))
+    steps  = to_int(data.get("steps"))
+    sleep  = to_int(data.get("sleepMinutes"))
+
+    cur.execute("INSERT INTO weight_log (date) VALUES (%s) ON CONFLICT (date) DO NOTHING", (date,))
     if weight is not None:
         cur.execute("UPDATE weight_log SET weight = %s WHERE date = %s", (weight, date))
     if steps is not None:
         cur.execute("UPDATE weight_log SET steps = %s WHERE date = %s", (steps, date))
     if sleep is not None:
         cur.execute("UPDATE weight_log SET sleep_minutes = %s WHERE date = %s", (sleep, date))
+
+    # Meditation
+    mindful = to_float(data.get("mindfulMinutes"))
+    if mindful is not None and mindful > 0:
+        cur.execute("""
+            INSERT INTO meditation_log (date, minutes)
+            VALUES (%s, %s)
+            ON CONFLICT (date) DO UPDATE SET minutes = EXCLUDED.minutes
+        """, (date, mindful))
 
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True, "date": date})
