@@ -404,7 +404,14 @@ def sync():
 
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True, "date": date})
-
+@app.route("/api/health/weight/<path:date>", methods=["DELETE"])
+def delete_weight(date):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM weight_log WHERE date = %s", (date,))
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"ok": True})
+    
 @app.route("/api/meditation/<date>", methods=["DELETE"])
 def delete_meditation(date):
     conn = get_db()
