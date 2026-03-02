@@ -99,7 +99,7 @@ def init_db():
             triglycerides INTEGER,
             hdl INTEGER,
             ldl INTEGER,
-            vitamin_d NUMERIC(5,1),
+            total_cholesterol INTEGER,
             systolic INTEGER,
             diastolic INTEGER
         )
@@ -127,7 +127,7 @@ def init_db():
             conn.commit()
         except Exception:
             conn.rollback()
-    for col, coltype in [('systolic', 'INTEGER'), ('diastolic', 'INTEGER')]:
+    for col, coltype in [('systolic', 'INTEGER'), ('diastolic', 'INTEGER'), ('total_cholesterol', 'INTEGER')]:
         try:
             cur.execute(f"ALTER TABLE labs ADD COLUMN {col} {coltype}")
             conn.commit()
@@ -301,7 +301,7 @@ def save_weight():
 def get_labs():
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, date, a1c, fasting_glucose, triglycerides, hdl, ldl, vitamin_d, systolic, diastolic FROM labs ORDER BY date")
+    cur.execute("SELECT id, date, a1c, fasting_glucose, triglycerides, hdl, ldl, total_cholesterol, systolic, diastolic FROM labs ORDER BY date")
     rows = fetchall_dict(cur)
     cur.close(); conn.close()
     return jsonify(rows)
@@ -312,7 +312,7 @@ def save_labs():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        INSERT INTO labs (date, a1c, fasting_glucose, triglycerides, hdl, ldl, vitamin_d, systolic, diastolic)
+        INSERT INTO labs (date, a1c, fasting_glucose, triglycerides, hdl, ldl, total_cholesterol, systolic, diastolic)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (date) DO UPDATE SET
             a1c = EXCLUDED.a1c,
@@ -320,12 +320,12 @@ def save_labs():
             triglycerides = EXCLUDED.triglycerides,
             hdl = EXCLUDED.hdl,
             ldl = EXCLUDED.ldl,
-            vitamin_d = EXCLUDED.vitamin_d,
+            total_cholesterol = EXCLUDED.total_cholesterol,
             systolic = EXCLUDED.systolic,
             diastolic = EXCLUDED.diastolic
     """, (data["date"], data.get("a1c"), data.get("fastingGlucose"),
           data.get("triglycerides"), data.get("hdl"), data.get("ldl"),
-          data.get("vitaminD"), data.get("systolic"), data.get("diastolic")))
+          data.get("totalCholesterol"), data.get("systolic"), data.get("diastolic")))
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
