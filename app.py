@@ -4,12 +4,24 @@ import pg8000.native
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
+import os
+
+API_SECRET_KEY = os.environ.get('API_SECRET_KEY')
+
+def check_api_key():
+    # Skip key check for OPTIONS requests (CORS preflight)
+    if request.method == 'OPTIONS':
+        return None
+    key = request.headers.get('X-API-Key')
+    if not key or key != API_SECRET_KEY:
+        return jsonify({'error': 'Unauthorized'}), 401
 from urllib.parse import urlparse
 
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app, origins=["https://dashboard.joshwhitcomb.com", "http://localhost:3000"])
+app.before_request(check_api_key)
 
 def get_db():
     url = urlparse(os.environ["DATABASE_URL"])
