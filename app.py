@@ -9,8 +9,9 @@ import os
 API_SECRET_KEY = os.environ.get('API_SECRET_KEY')
 
 def check_api_key():
-    # Skip key check for OPTIONS requests (CORS preflight)
     if request.method == 'OPTIONS':
+        return None
+    if request.path == '/api/debug-key':
         return None
     key = request.headers.get('X-API-Key')
     if not key or key != API_SECRET_KEY:
