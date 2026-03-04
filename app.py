@@ -11,8 +11,6 @@ API_SECRET_KEY = os.environ.get('API_SECRET_KEY')
 def check_api_key():
     if request.method == 'OPTIONS':
         return None
-    if request.path == '/api/debug-key':
-        return None
     key = request.headers.get('X-API-Key')
     if not key or key != API_SECRET_KEY:
         return jsonify({'error': 'Unauthorized'}), 401
@@ -24,10 +22,6 @@ app = Flask(__name__)
 CORS(app, origins=["https://dashboard.joshwhitcomb.com", "http://localhost:3000"])
 app.before_request(check_api_key)
 
-@app.route("/api/debug-key", methods=["GET"])
-def debug_key():
-    stored = os.environ.get('API_SECRET_KEY', 'NOT SET')
-    return jsonify({'stored_prefix': stored[:8] if stored else 'NOT SET', 'length': len(stored) if stored else 0})
 
 def get_db():
     url = urlparse(os.environ["DATABASE_URL"])
