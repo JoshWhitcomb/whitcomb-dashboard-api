@@ -139,15 +139,7 @@ def init_db():
             value TEXT
         )
     """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS habit_log (
-            id SERIAL PRIMARY KEY,
-            date TEXT NOT NULL,
-            habit TEXT NOT NULL,
-            value NUMERIC(8,2) NOT NULL DEFAULT 1,
-            UNIQUE(date, habit)
-        )
-    """)
+    # Safe column migrations
     for col, coltype in [('steps', 'INTEGER'), ('sleep_minutes', 'INTEGER')]:
         try:
             cur.execute(f"ALTER TABLE weight_log ADD COLUMN {col} {coltype}")
@@ -164,6 +156,7 @@ def init_db():
     cur.close()
     conn.close()
 
+# ── Accounts ──────────────────────────────────────────
 @app.route("/api/accounts", methods=["GET"])
 def get_accounts():
     conn = get_db()
@@ -187,6 +180,7 @@ def save_accounts():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
+# ── Net Worth History ──────────────────────────────────
 @app.route("/api/net-worth-history", methods=["GET"])
 def get_history():
     conn = get_db()
@@ -210,6 +204,7 @@ def save_history():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
+# ── Income ────────────────────────────────────────────
 @app.route("/api/income", methods=["GET"])
 def get_income():
     conn = get_db()
@@ -232,6 +227,7 @@ def save_income():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
+# ── Contributions ─────────────────────────────────────
 @app.route("/api/contributions", methods=["GET"])
 def get_contributions():
     conn = get_db()
@@ -253,6 +249,7 @@ def save_contributions():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
+# ── Wheel ─────────────────────────────────────────────
 @app.route("/api/wheel/trades", methods=["GET"])
 def get_trades():
     conn = get_db()
@@ -296,6 +293,7 @@ def save_shares():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
+# ── Health: Weight ─────────────────────────────────────
 @app.route("/api/health/weight", methods=["GET"])
 def get_weight():
     conn = get_db()
@@ -318,6 +316,7 @@ def save_weight():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
+# ── Health: Labs ───────────────────────────────────────
 @app.route("/api/health/labs", methods=["GET"])
 def get_labs():
     conn = get_db()
@@ -350,6 +349,7 @@ def save_labs():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
+# ── Meditation ─────────────────────────────────────────
 @app.route("/api/meditation", methods=["GET"])
 def get_meditation():
     conn = get_db()
@@ -372,6 +372,7 @@ def save_meditation():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
+# ── iOS Shortcut Sync ──────────────────────────────────
 @app.route("/api/sync", methods=["POST"])
 def sync():
     data = request.json
@@ -391,6 +392,7 @@ def sync():
     conn = get_db()
     cur = conn.cursor()
 
+    # Weight / steps / sleep
     weight = to_float(data.get("weight"))
     steps  = to_int(data.get("steps"))
     sleep  = to_int(data.get("sleepMinutes"))
@@ -403,6 +405,7 @@ def sync():
     if sleep is not None:
         cur.execute("UPDATE weight_log SET sleep_minutes = %s WHERE date = %s", (sleep, date))
 
+    # Meditation
     mindful = to_float(data.get("mindfulMinutes"))
     if mindful is not None and mindful > 0:
         cur.execute("""
@@ -413,7 +416,6 @@ def sync():
 
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True, "date": date})
-
 @app.route("/api/health/weight/<path:date>", methods=["DELETE"])
 def delete_weight(date):
     conn = get_db()
@@ -421,7 +423,7 @@ def delete_weight(date):
     cur.execute("DELETE FROM weight_log WHERE date = %s", (date,))
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
-
+    
 @app.route("/api/meditation/<date>", methods=["DELETE"])
 def delete_meditation(date):
     conn = get_db()
@@ -430,6 +432,7 @@ def delete_meditation(date):
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
+# ── Goals ─────────────────────────────────────────────
 @app.route("/api/goals", methods=["GET"])
 def get_goals():
     conn = get_db()
@@ -453,36 +456,7 @@ def save_goals():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
-@app.route("/api/habits", methods=["GET"])
-def get_habits():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT date, habit, value FROM habit_log ORDER BY date")
-    rows = fetchall_dict(cur)
-    cur.close(); conn.close()
-    return jsonify(rows)
-
-@app.route("/api/habits", methods=["POST"])
-def save_habit():
-    data = request.json
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO habit_log (date, habit, value)
-        VALUES (%s, %s, %s)
-        ON CONFLICT (date, habit) DO UPDATE SET value = EXCLUDED.value
-    """, (data["date"], data["habit"], data["value"]))
-    conn.commit(); cur.close(); conn.close()
-    return jsonify({"ok": True})
-
-@app.route("/api/habits/<date>/<habit>", methods=["DELETE"])
-def delete_habit(date, habit):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM habit_log WHERE date = %s AND habit = %s", (date, habit))
-    conn.commit(); cur.close(); conn.close()
-    return jsonify({"ok": True})
-
+# ── Settings ──────────────────────────────────────────
 @app.route("/api/settings", methods=["GET"])
 def get_settings():
     conn = get_db()
