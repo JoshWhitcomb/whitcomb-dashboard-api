@@ -378,6 +378,12 @@ def sync():
     date = data.get("date", "").strip()
     if not date:
         return jsonify({"error": "date required"}), 400
+    # Normalize to YYYY-MM-DD regardless of what format the Shortcut sends
+    try:
+        from dateutil import parser as dateparser
+        date = dateparser.parse(date).strftime("%Y-%m-%d")
+    except:
+        pass
 
     def to_float(v):
         try:
