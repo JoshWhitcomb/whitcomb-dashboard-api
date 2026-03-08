@@ -615,6 +615,29 @@ def identify_book():
         parsed = {"title": "", "author": ""}
     return jsonify(parsed)
 
+@app.route("/api/backfill-spanish", methods=["POST"])
+def backfill_spanish():
+    from datetime import date, timedelta
+    auth = check_api_key()
+    if auth: return auth
+    conn = get_db()
+    cur = conn.cursor()
+    start = date(2019, 6, 9)
+    end = date(2026, 3, 7)
+    d = start
+    count = 0
+    while d <= end:
+        cur.execute(
+            "INSERT INTO habit_log (date, habit, value) VALUES (%s, %s, %s) ON CONFLICT (date, habit) DO NOTHING",
+            (d.isoformat(), 'spanish', 1)
+        )
+        d += timedelta(days=1)
+        count += 1
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"ok": True, "inserted": count})
+
 @app.route("/api/health-check")
 def health_check():
     return jsonify({"status": "ok"})
