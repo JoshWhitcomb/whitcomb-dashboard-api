@@ -1,4 +1,6 @@
 import os
+import json
+import requests
 import pg8000
 import pg8000.native
 from flask import Flask, jsonify, request
@@ -568,6 +570,50 @@ def delete_book(book_id):
     cur.execute("DELETE FROM books WHERE id = %s", (book_id,))
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
+
+@app.route("/api/identify-book", methods=["POST"])
+def identify_book():
+    data = request.json
+    image_data = data.get("image")
+    media_type = data.get("media_type", "image/jpeg")
+    if not image_data:
+        return jsonify({"error": "No image provided"}), 400
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not anthropic_key:
+        return jsonify({"error": "Anthropic API key not configured"}), 500
+    resp = requests.post(
+        "https://api.anthropic.com/v1/messages",
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": anthropic_key,
+            "anthropic-version": "2023-06-01",
+        },
+        json={
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 200,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": media_type, "data": image_data}
+                    },
+                    {
+                        "type": "text",
+                        "text": "This is a photo of a book cover. Identify the book title and author. Respond with ONLY a JSON object like: {\"title\": \"...\", \"author\": \"...\"}. If you cannot identify it, respond with {\"title\": \"\", \"author\": \"\"}."
+                    }
+                ]
+            }]
+        }
+    )
+    result = resp.json()
+    text = result.get("content", [{}])[0].get("text", "{}")
+    clean = text.replace("```json", "").replace("```", "").strip()
+    try:
+        parsed = json.loads(clean)
+    except Exception:
+        parsed = {"title": "", "author": ""}
+    return jsonify(parsed)
 
 @app.route("/api/health-check")
 def health_check():
