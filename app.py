@@ -439,6 +439,15 @@ def delete_weight(date):
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
+@app.route("/api/health/weight/delete-malformed", methods=["DELETE"])
+def delete_malformed_weight():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM weight_log WHERE date NOT SIMILAR TO '[0-9]{4}-[0-9]{2}-[0-9]{2}'")
+    deleted = cur.rowcount
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"ok": True, "deleted": deleted})
+
 @app.route("/api/meditation/<date>", methods=["DELETE"])
 def delete_meditation(date):
     conn = get_db()
