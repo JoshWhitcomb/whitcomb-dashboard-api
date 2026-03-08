@@ -148,6 +148,16 @@ def init_db():
             UNIQUE(date, habit)
         )
     """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS books (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            author TEXT,
+            started_date TEXT,
+            finished_date TEXT,
+            status TEXT DEFAULT 'reading'
+        )
+    """)
     for col, coltype in [('steps', 'INTEGER'), ('sleep_minutes', 'INTEGER')]:
         try:
             cur.execute(f"ALTER TABLE weight_log ADD COLUMN {col} {coltype}")
@@ -378,7 +388,6 @@ def sync():
     date = data.get("date", "").strip()
     if not date:
         return jsonify({"error": "date required"}), 400
-    # Normalize to YYYY-MM-DD regardless of what format the Shortcut sends
     try:
         from dateutil import parser as dateparser
         date = dateparser.parse(date).strftime("%Y-%m-%d")
@@ -508,6 +517,55 @@ def save_settings():
             INSERT INTO settings (key, value) VALUES (%s, %s)
             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
         """, (key, str(value)))
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/books", methods=["GET"])
+def get_books():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, title, author, started_date, finished_date, status FROM books ORDER BY id DESC")
+    rows = fetchall_dict(cur)
+    cur.close(); conn.close()
+    return jsonify(rows)
+
+@app.route("/api/books", methods=["POST"])
+def add_book():
+    data = request.json
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO books (title, author, started_date, status)
+        VALUES (%s, %s, %s, %s)
+        RETURNING id
+    """, (data["title"], data.get("author", ""), data.get("started_date", ""), data.get("status", "reading")))
+    new_id = cur.fetchone()[0]
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"ok": True, "id": new_id})
+
+@app.route("/api/books/<int:book_id>", methods=["PATCH"])
+def update_book(book_id):
+    data = request.json
+    conn = get_db()
+    cur = conn.cursor()
+    fields = []
+    values = []
+    for field in ["title", "author", "started_date", "finished_date", "status"]:
+        if field in data:
+            fields.append(f"{field} = %s")
+            values.append(data[field])
+    if fields:
+        values.append(book_id)
+        cur.execute(f"UPDATE books SET {', '.join(fields)} WHERE id = %s", values)
+        conn.commit()
+    cur.close(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/books/<int:book_id>", methods=["DELETE"])
+def delete_book(book_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM books WHERE id = %s", (book_id,))
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
