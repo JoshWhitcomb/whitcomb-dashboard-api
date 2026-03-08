@@ -492,6 +492,17 @@ def save_habit():
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
 
+@app.route("/api/habits/bulk-delete", methods=["POST"])
+def bulk_delete_habits():
+    data = request.json
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM habit_log WHERE habit = %s AND date < %s",
+        (data["habit"], data["before_date"]))
+    deleted = cur.rowcount
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"ok": True, "deleted": deleted})
+
 @app.route("/api/habits/<date>/<habit>", methods=["DELETE"])
 def delete_habit(date, habit):
     conn = get_db()
