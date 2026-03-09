@@ -166,6 +166,11 @@ def init_db():
             conn.commit()
         except Exception:
             conn.rollback()
+    try:
+        cur.execute("ALTER TABLE books ADD COLUMN rating INTEGER")
+        conn.commit()
+    except Exception:
+        conn.rollback()
     for col, coltype in [('systolic', 'INTEGER'), ('diastolic', 'INTEGER'), ('total_cholesterol', 'INTEGER')]:
         try:
             cur.execute(f"ALTER TABLE labs ADD COLUMN {col} {coltype}")
@@ -546,7 +551,7 @@ def save_settings():
 def get_books():
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT id, title, author, started_date, finished_date, status FROM books ORDER BY id DESC")
+    cur.execute("SELECT id, title, author, started_date, finished_date, status, rating FROM books ORDER BY id DESC")
     rows = fetchall_dict(cur)
     cur.close(); conn.close()
     return jsonify(rows)
@@ -572,7 +577,7 @@ def update_book(book_id):
     cur = conn.cursor()
     fields = []
     values = []
-    for field in ["title", "author", "started_date", "finished_date", "status"]:
+    for field in ["title", "author", "started_date", "finished_date", "status", "rating"]:
         if field in data:
             fields.append(f"{field} = %s")
             values.append(data[field])
