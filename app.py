@@ -496,7 +496,7 @@ def save_habit():
     cur.execute("""
         INSERT INTO habit_log (date, habit, value)
         VALUES (%s, %s, %s)
-        ON CONFLICT (date, habit) DO UPDATE SET value = EXCLUDED.value
+        ON CONFLICT (date, habit) DO UPDATE SET value = habit_log.value + EXCLUDED.value
     """, (data["date"], data["habit"], data["value"]))
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
