@@ -177,6 +177,29 @@ def init_db():
             conn.commit()
         except Exception:
             conn.rollback()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS connect_people (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            relationship TEXT,
+            cadence_days INTEGER DEFAULT 30,
+            last_contact TEXT,
+            notes TEXT DEFAULT '',
+            gift_ideas TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS connect_logs (
+            id SERIAL PRIMARY KEY,
+            date TEXT NOT NULL,
+            type TEXT NOT NULL,
+            notes TEXT DEFAULT '',
+            people TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
     conn.commit()
     cur.close()
     conn.close()
@@ -671,3 +694,98 @@ init_db()
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+
+# ── CONNECT ──────────────────────────────────────────────────────────────────
+
+@app.route("/api/connect/people", methods=["GET"])
+def get_connect_people():
+    auth = check_api_key()
+    if auth: return auth
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name, relationship, cadence_days, last_contact, notes, gift_ideas FROM connect_people ORDER BY name")
+    rows = fetchall_dict(cur)
+    cur.close(); conn.close()
+    return jsonify(rows)
+
+@app.route("/api/connect/people", methods=["POST"])
+def add_connect_person():
+    auth = check_api_key()
+    if auth: return auth
+    d = request.json
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO connect_people (name, relationship, cadence_days, last_contact, notes, gift_ideas) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+        (d.get('name'), d.get('relationship'), d.get('cadence_days', 30), d.get('last_contact'), d.get('notes',''), d.get('gift_ideas',''))
+    )
+    new_id = cur.fetchone()[0]
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"ok": True, "id": new_id})
+
+@app.route("/api/connect/people/<int:person_id>", methods=["PATCH"])
+def update_connect_person(person_id):
+    auth = check_api_key()
+    if auth: return auth
+    d = request.json
+    allowed = ['name','relationship','cadence_days','last_contact','notes','gift_ideas']
+    fields = {k: v for k, v in d.items() if k in allowed}
+    if not fields:
+        return jsonify({"error": "No valid fields"}), 400
+    conn = get_db()
+    cur = conn.cursor()
+    sets = ", ".join(f"{k} = %s" for k in fields)
+    cur.execute(f"UPDATE connect_people SET {sets} WHERE id = %s", list(fields.values()) + [person_id])
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/connect/people/<int:person_id>", methods=["DELETE"])
+def delete_connect_person(person_id):
+    auth = check_api_key()
+    if auth: return auth
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM connect_people WHERE id = %s", (person_id,))
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/connect/logs", methods=["GET"])
+def get_connect_logs():
+    auth = check_api_key()
+    if auth: return auth
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, date, type, notes, people FROM connect_logs ORDER BY date DESC")
+    rows = fetchall_dict(cur)
+    cur.close(); conn.close()
+    return jsonify(rows)
+
+@app.route("/api/connect/logs", methods=["POST"])
+def add_connect_log():
+    auth = check_api_key()
+    if auth: return auth
+    d = request.json
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO connect_logs (date, type, notes, people) VALUES (%s, %s, %s, %s) RETURNING id",
+        (d.get('date'), d.get('type'), d.get('notes',''), d.get('people',''))
+    )
+    new_id = cur.fetchone()[0]
+    # Update last_contact for each person involved
+    if d.get('person_ids'):
+        for pid in d['person_ids']:
+            cur.execute("UPDATE connect_people SET last_contact = %s WHERE id = %s", (d.get('date'), pid))
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"ok": True, "id": new_id})
+
+@app.route("/api/connect/logs/<int:log_id>", methods=["DELETE"])
+def delete_connect_log(log_id):
+    auth = check_api_key()
+    if auth: return auth
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM connect_logs WHERE id = %s", (log_id,))
+    conn.commit(); cur.close(); conn.close()
+    return jsonify({"ok": True})
