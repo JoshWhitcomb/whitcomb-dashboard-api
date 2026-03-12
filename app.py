@@ -694,7 +694,6 @@ init_db()
 
 
 @app.route('/api/finance/retirement-debug', methods=['GET'])
-@require_api_key
 def get_retirement_debug():
     try:
         service = get_sheets_service()
