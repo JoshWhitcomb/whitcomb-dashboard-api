@@ -707,6 +707,83 @@ def get_retirement_debug():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
+@app.route('/api/finance/retirement', methods=['GET'])
+def get_retirement():
+    try:
+        service = get_sheets_service()
+        RETIREMENT_ID = '1ep3Ax2Vg3awiDGi0_l805LnW0z52HnTjcaColNHMQdw'
+        tabs = ['2020', '2021', '2022', '2023', '2024', '2025', '2026']
+        snapshots = []
+
+        def parse_dollar(val):
+            if not val:
+                return 0.0
+            return float(str(val).replace('$', '').replace(',', '').strip() or 0)
+
+        for tab in tabs:
+            try:
+                result = service.spreadsheets().values().get(
+                    spreadsheetId=RETIREMENT_ID, range=f'{tab}!A1:H45'
+                ).execute()
+                rows = result.get('values', [])
+
+                def get_cell(row_idx, col_idx):
+                    if row_idx >= len(rows):
+                        return ''
+                    row = rows[row_idx]
+                    if col_idx >= len(row):
+                        return ''
+                    return row[col_idx]
+
+                # Each tab has up to 3 snapshots at column offsets 0, 3, 6
+                for col_offset in [0, 3, 6]:
+                    date_val = get_cell(1, col_offset + 1)  # Row 2, col B/E/H
+                    total_val = get_cell(18, col_offset + 1)  # Row 19
+                    if not date_val or not total_val:
+                        continue
+                    snapshots.append({
+                        'date': date_val,
+                        'tab': tab,
+                        'total': parse_dollar(total_val),
+                        'fv6': parse_dollar(get_cell(19, col_offset + 1)),
+                        'fv10': parse_dollar(get_cell(20, col_offset + 1)),
+                        'income_current': parse_dollar(get_cell(29, col_offset + 1)),
+                        'income_6': parse_dollar(get_cell(30, col_offset + 1)),
+                        'income_10': parse_dollar(get_cell(31, col_offset + 1)),
+                        'pension_jenny': parse_dollar(get_cell(25, col_offset + 1)),
+                        'pension_josh': parse_dollar(get_cell(26, col_offset + 1)),
+                        'ss_josh': parse_dollar(get_cell(27, col_offset + 1)),
+                        'ss_jenny': parse_dollar(get_cell(28, col_offset + 1)),
+                        'contributions_monthly': parse_dollar(get_cell(41, col_offset + 1)),
+                    })
+            except Exception:
+                continue
+
+        # Sort by date, deduplicate
+        from datetime import datetime
+        def parse_date(d):
+            for fmt in ['%m/%d/%Y', '%m/%d/%y']:
+                try:
+                    return datetime.strptime(d, fmt)
+                except:
+                    pass
+            return datetime.min
+
+        snapshots.sort(key=lambda s: parse_date(s['date']))
+
+        # Deduplicate by date string
+        seen = set()
+        unique = []
+        for s in snapshots:
+            if s['date'] not in seen:
+                seen.add(s['date'])
+                unique.append(s)
+
+        return jsonify(unique)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == "__main__":
     app.run(debug=True)
 
