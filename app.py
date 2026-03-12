@@ -789,3 +789,76 @@ def delete_connect_log(log_id):
     cur.execute("DELETE FROM connect_logs WHERE id = %s", (log_id,))
     conn.commit(); cur.close(); conn.close()
     return jsonify({"ok": True})
+
+# Google Sheets debt tracking
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+
+SPREADSHEET_ID = '1af5BFxJSOvi15DaceBwawVcFEc5J_0qnwCozgq8-yg4'
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
+
+def get_sheets_service():
+    creds_json = os.environ.get('GOOGLE_SHEETS_CREDENTIALS')
+    if creds_json:
+        import json as _json
+        creds_info = _json.loads(creds_json)
+        creds = service_account.Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+    else:
+        creds = service_account.Credentials.from_service_account_file(
+            os.path.join(os.path.dirname(__file__), 'whitcomb-dashboard-b01ae220f667.json'), scopes=SCOPES)
+    return build('sheets', 'v4', credentials=creds)
+
+@app.route("/api/finance/debt", methods=["GET"])
+def get_debt():
+    auth = check_api_key()
+    if auth: return auth
+    try:
+        service = get_sheets_service()
+        result = service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range='Sheet1!A:E'
+        ).execute()
+        rows = result.get('values', [])
+
+        months = []
+        i = 0
+        while i < len(rows):
+            row = rows[i]
+            # Look for month header: cell B has "Month YYYY" pattern
+            b = row[1].strip() if len(row) > 1 else ''
+            import re
+            if re.match(r'^[A-Za-z]+ \d{4}$', b):
+                month_name = b
+                debts = []
+                i += 1
+                # Skip until we hit the "What" header row
+                while i < len(rows) and (len(rows[i]) < 2 or rows[i][1].strip() != 'What'):
+                    i += 1
+                i += 1  # skip the "What" header row
+                # Read debt rows until blank or totals row
+                while i < len(rows):
+                    r = rows[i]
+                    name = r[1].strip() if len(r) > 1 else ''
+                    if not name or name.startswith('$'):
+                        break
+                    balance_str = r[2].strip() if len(r) > 2 else '0'
+                    minimum_str = r[3].strip() if len(r) > 3 else '0'
+                    paid = len(r) > 4 and r[4].strip().upper() == 'X'
+                    # Strip $ and commas
+                    balance = float(balance_str.replace('$','').replace(',','') or 0)
+                    minimum = float(minimum_str.replace('$','').replace(',','') or 0)
+                    debts.append({
+                        'name': name,
+                        'balance': balance,
+                        'minimum': minimum,
+                        'paid': paid
+                    })
+                    i += 1
+                if debts:
+                    months.append({'month': month_name, 'debts': debts})
+            else:
+                i += 1
+
+        return jsonify(months)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
