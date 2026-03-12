@@ -701,7 +701,7 @@ def get_retirement_debug():
         meta = service.spreadsheets().get(spreadsheetId=RETIREMENT_ID).execute()
         sheets = [s['properties']['title'] for s in meta['sheets']]
         result = service.spreadsheets().values().get(
-            spreadsheetId=RETIREMENT_ID, range='2026!A1:H10'
+            spreadsheetId=RETIREMENT_ID, range='2026!A1:H45'
         ).execute()
         return jsonify({'tabs': sheets, 'sample': result.get('values', [])})
     except Exception as e:
