@@ -862,3 +862,19 @@ def get_debt():
         return jsonify(months)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/finance/retirement-debug', methods=['GET'])
+@require_api_key
+def get_retirement_debug():
+    try:
+        service = get_sheets_service()
+        RETIREMENT_ID = '1ep3Ax2Vg3awiDGi0_l805LnW0z52HnTjcaColNHMQdw'
+        meta = service.spreadsheets().get(spreadsheetId=RETIREMENT_ID).execute()
+        sheets = [s['properties']['title'] for s in meta['sheets']]
+        # Read first 5 rows of 2026 tab, columns A-H
+        result = service.spreadsheets().values().get(
+            spreadsheetId=RETIREMENT_ID, range='2026!A1:H10'
+        ).execute()
+        return jsonify({'tabs': sheets, 'sample': result.get('values', [])})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
