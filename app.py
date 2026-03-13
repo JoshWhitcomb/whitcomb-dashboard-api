@@ -713,15 +713,30 @@ def get_retirement():
     try:
         service = get_sheets_service()
         RETIREMENT_ID = '1ep3Ax2Vg3awiDGi0_l805LnW0z52HnTjcaColNHMQdw'
-        tabs = ['2020', '2021', '2022', '2023', '2024', '2025', '2026']
+
+        # Tab-specific row mappings (0-indexed)
+        # date_row: row containing the snapshot date (col B/E/H)
+        # total_row: row containing Investment/Savings Total
+        tab_config = {
+            '2021': {'date_row': 2, 'total_row': 17},
+            '2022': {'date_row': 2, 'total_row': 18},
+            '2023': {'date_row': 1, 'total_row': 16},
+            '2024': {'date_row': 1, 'total_row': 17},
+            '2025': {'date_row': 1, 'total_row': 18},
+            '2026': {'date_row': 1, 'total_row': 18},
+        }
+
         snapshots = []
 
         def parse_dollar(val):
             if not val:
                 return 0.0
-            return float(str(val).replace('$', '').replace(',', '').strip() or 0)
+            try:
+                return float(str(val).replace('$', '').replace(',', '').strip())
+            except:
+                return 0.0
 
-        for tab in tabs:
+        for tab, cfg in tab_config.items():
             try:
                 result = service.spreadsheets().values().get(
                     spreadsheetId=RETIREMENT_ID, range=f'{tab}!A1:H45'
@@ -736,43 +751,38 @@ def get_retirement():
                         return ''
                     return row[col_idx]
 
-                # Each tab has up to 3 snapshots at column offsets 0, 3, 6
+                date_row  = cfg['date_row']
+                total_row = cfg['total_row']
+
                 for col_offset in [0, 3, 6]:
-                    date_val = get_cell(1, col_offset + 1)  # Row 2, col B/E/H
-                    total_val = get_cell(18, col_offset + 1)  # Row 19
+                    date_val  = get_cell(date_row,  col_offset + 1)
+                    total_val = get_cell(total_row, col_offset + 1)
                     if not date_val or not total_val:
                         continue
+                    total = parse_dollar(total_val)
+                    if total <= 0:
+                        continue
+
                     snapshots.append({
-                        'date': date_val,
-                        'tab': tab,
-                        'total': parse_dollar(total_val),
-                        'fv6': parse_dollar(get_cell(19, col_offset + 1)),
-                        'fv10': parse_dollar(get_cell(20, col_offset + 1)),
-                        'income_current': parse_dollar(get_cell(29, col_offset + 1)),
-                        'income_6': parse_dollar(get_cell(30, col_offset + 1)),
-                        'income_10': parse_dollar(get_cell(31, col_offset + 1)),
-                        'pension_jenny': parse_dollar(get_cell(25, col_offset + 1)),
-                        'pension_josh': parse_dollar(get_cell(26, col_offset + 1)),
-                        'ss_josh': parse_dollar(get_cell(27, col_offset + 1)),
-                        'ss_jenny': parse_dollar(get_cell(28, col_offset + 1)),
-                        'contributions_monthly': parse_dollar(get_cell(41, col_offset + 1)),
+                        'date':  date_val,
+                        'tab':   tab,
+                        'total': total,
                     })
             except Exception:
                 continue
 
-        # Sort by date, deduplicate
         from datetime import datetime
         def parse_date(d):
-            for fmt in ['%m/%d/%Y', '%m/%d/%y']:
+            for fmt in ['%m/%d/%Y', '%m/%d/%y', '%m/%d/%y']:
                 try:
-                    return datetime.strptime(d, fmt)
+                    return datetime.strptime(d.strip(), fmt)
                 except:
                     pass
             return datetime.min
 
         snapshots.sort(key=lambda s: parse_date(s['date']))
 
-        # Deduplicate by date string
+        # Deduplicate
         seen = set()
         unique = []
         for s in snapshots:
@@ -780,7 +790,34 @@ def get_retirement():
                 seen.add(s['date'])
                 unique.append(s)
 
-        return jsonify(unique)
+        # Get latest snapshot for income/projection data from 2026 tab
+        latest_result = service.spreadsheets().values().get(
+            spreadsheetId=RETIREMENT_ID, range='2026!A1:H45'
+        ).execute()
+        latest_rows = latest_result.get('values', [])
+
+        def get_latest(row_idx, col_offset=6):
+            if row_idx >= len(latest_rows):
+                return 0.0
+            row = latest_rows[row_idx]
+            if col_offset + 1 >= len(row):
+                return 0.0
+            return parse_dollar(row[col_offset + 1])
+
+        latest = {
+            'fv6':               get_latest(19),
+            'fv10':              get_latest(20),
+            'income_current':    get_latest(29),
+            'income_6':          get_latest(30),
+            'income_10':         get_latest(31),
+            'pension_jenny':     get_latest(25),
+            'pension_josh':      get_latest(26),
+            'ss_josh':           get_latest(27),
+            'ss_jenny':          get_latest(28),
+            'contributions_monthly': get_latest(41),
+        }
+
+        return jsonify({'snapshots': unique, 'latest': latest})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
