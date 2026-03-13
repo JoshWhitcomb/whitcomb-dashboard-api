@@ -763,10 +763,17 @@ def get_retirement():
                     if total < 100000:
                         continue
 
+                    try:
+                        snap_year = int(date_val.strip().split('/')[-1])
+                        if snap_year < 100:
+                            snap_year += 2000
+                    except:
+                        snap_year = int(tab)
                     snapshots.append({
                         'date':  date_val,
                         'tab':   tab,
                         'total': total,
+                        'year':  snap_year,
                     })
             except Exception:
                 continue
@@ -805,6 +812,7 @@ def get_retirement():
             return parse_dollar(row[col_offset + 1])
 
         latest = {
+            'total':             unique[-1]['total'] if unique else 0,
             'fv6':               get_latest(19),
             'fv10':              get_latest(20),
             'income_current':    get_latest(29),
