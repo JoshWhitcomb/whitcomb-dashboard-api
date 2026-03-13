@@ -865,6 +865,24 @@ def get_retirement():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/debug/cache-status', methods=['GET'])
+def cache_status():
+    try:
+        from datetime import datetime, timezone
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT key, updated_at, length(data) FROM api_cache")
+        rows = cur.fetchall()
+        cur.close(); conn.close()
+        result = []
+        for row in rows:
+            key, updated_at, size = row
+            age = (datetime.now(timezone.utc) - updated_at.replace(tzinfo=timezone.utc)).total_seconds()
+            result.append({'key': key, 'updated_at': str(updated_at), 'age_seconds': age, 'data_size': size})
+        return jsonify({'cache_entries': result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == "__main__":
     app.run(debug=True)
 
