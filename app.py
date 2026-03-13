@@ -760,7 +760,7 @@ def get_retirement():
                     if not date_val or not total_val:
                         continue
                     total = parse_dollar(total_val)
-                    if total <= 0:
+                    if total < 100000:
                         continue
 
                     snapshots.append({
