@@ -142,6 +142,13 @@ def init_db():
         )
     """)
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS api_cache (
+            key TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS habit_log (
             id SERIAL PRIMARY KEY,
             date TEXT NOT NULL,
@@ -711,6 +718,22 @@ def get_retirement_debug():
 @app.route('/api/finance/retirement', methods=['GET'])
 def get_retirement():
     try:
+        import json as _json
+        from datetime import datetime, timezone
+        # Check cache first
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("SELECT data, updated_at FROM api_cache WHERE key = 'retirement'")
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if row:
+                cached_data, updated_at = row
+                age_seconds = (datetime.now(timezone.utc) - updated_at.replace(tzinfo=timezone.utc)).total_seconds()
+                if age_seconds < 3600:
+                    return app.response_class(response=cached_data, status=200, mimetype='application/json')
+        except Exception:
+            pass
         service = get_sheets_service()
         RETIREMENT_ID = '1ep3Ax2Vg3awiDGi0_l805LnW0z52HnTjcaColNHMQdw'
 
@@ -825,7 +848,20 @@ def get_retirement():
             'contributions_monthly': get_latest(41),
         }
 
-        return jsonify({'snapshots': unique, 'latest': latest})
+        result = {'snapshots': unique, 'latest': latest}
+        # Write to cache
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO api_cache (key, data, updated_at) VALUES ('retirement', %s, NOW()) ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()",
+                (_json.dumps(result),)
+            )
+            conn.commit()
+            cur.close(); conn.close()
+        except Exception:
+            pass
+        return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
